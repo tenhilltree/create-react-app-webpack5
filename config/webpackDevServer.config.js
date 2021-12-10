@@ -15,10 +15,47 @@ const sockPath = process.env.WDS_SOCKET_PATH; // default: '/sockjs-node'
 const sockPort = process.env.WDS_SOCKET_PORT;
 
 module.exports = function (proxy, allowedHost) {
+  const disableFirewall =
+    !proxy || process.env.DANGEROUSLY_DISABLE_HOST_CHECK === 'true';
   return {
-    allowedHosts: "all",
+    allowedHosts: disableFirewall ? 'all' : [allowedHost],
     // Enable gzip compression of generated files.
     compress: true,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': '*',
+      'Access-Control-Allow-Headers': '*',
+    },
+    static: {
+      directory: paths.appPublic,
+      publicPath: paths.publicUrlOrPath,
+      // Reportedly, this avoids CPU overload on some systems.
+      // https://github.com/facebook/create-react-app/issues/293
+      // src/node_modules is not ignored to support absolute imports
+      // https://github.com/facebook/create-react-app/issues/1065
+      watch: {
+        ignored: ignoredFiles(paths.appSrc),
+      },
+    },
+    client: {
+      webSocketURL: {
+        hostname: sockHost,
+        pathname: sockPath,
+        port: sockPort,
+      },
+      overlay: {
+        errors: true,
+        warnings: false,
+      },
+      logging: "none",
+    },
+    devMiddleware: {
+      // It is important to tell WebpackDevServer to use the same "publicPath" path as
+      // we specified in the webpack config. When homepage is '.', default to serving
+      // from the root.
+      // remove last slash so user can land on `/test` instead of `/test/`
+      publicPath: paths.publicUrlOrPath.slice(0, -1),
+    },
     // Enable hot reloading server. It will provide WDS_SOCKET_PATH endpoint
     // for the WebpackDevServer client so it can learn when the files were
     // updated. The WebpackDevServer client is included as an entry point
@@ -62,33 +99,6 @@ module.exports = function (proxy, allowedHost) {
       // https://github.com/facebook/create-react-app/issues/2272#issuecomment-302832432
       devServer.app.use(noopServiceWorkerMiddleware(paths.publicUrlOrPath));
     },
-    client: {
-      webSocketURL: {
-        hostname: sockHost,
-        pathname: sockPath,
-        port: sockPort,
-      },
-      overlay: false,
-      logging: "none",
-    },
-    static: {
-      directory: paths.appPublic,
-      publicPath: paths.publicUrlOrPath,
-      // Reportedly, this avoids CPU overload on some systems.
-      // https://github.com/facebook/create-react-app/issues/293
-      // src/node_modules is not ignored to support absolute imports
-      // https://github.com/facebook/create-react-app/issues/1065
-      watch: {
-        ignored: ignoredFiles(paths.appSrc),
-      },
-    },
-    devMiddleware: {
-      // It is important to tell WebpackDevServer to use the same "publicPath" path as
-      // we specified in the webpack config. When homepage is '.', default to serving
-      // from the root.
-      // remove last slash so user can land on `/test` instead of `/test/`
-      publicPath: paths.publicUrlOrPath.slice(0, -1),
-    },
-    webSocketServer: "ws",
+    // webSocketServer: "ws",
   };
 };
